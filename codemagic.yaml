@@ -94,26 +94,3 @@ workflows:
         script: npm ci
       - name: Build web app
         script: npm run build
-      - name: Sync web app into the iOS project
-        script: npx cap sync ios
-      - name: Set up code signing
-        script: xcode-project use-profiles
-      - name: Set build number
-        script: |
-          # PROJECT_BUILD_NUMBER increases across both workflows, avoiding duplicate build numbers.
-          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = $PROJECT_BUILD_NUMBER;/g" "$XCODE_PROJECT/project.pbxproj"
-          grep -m1 "CURRENT_PROJECT_VERSION" "$XCODE_PROJECT/project.pbxproj"
-      - name: Build signed .ipa
-        script: |
-          xcode-project build-ipa \
-            --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME"
-    artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_app_store: true
-        release_type: MANUAL
