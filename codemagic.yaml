@@ -1,4 +1,4 @@
-# MyNurse — iOS build on Codemagic → TestFlight
+# MyNurse — iOS build on Codemagic → App Store
 # Setup (once): see README-IOS.md, section "Codemagic setup".
 workflows:
   ios-testflight:
@@ -8,7 +8,7 @@ workflows:
     integrations:
       # The name you gave your App Store Connect API key in Codemagic
       # (Team settings → Team integrations → Developer Portal → Manage keys).
-      app_store_connect: MyNurse ASC key
+      app_store_connect: Codemagic
     environment:
       # Variable group holding NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
       # NEXT_PUBLIC_SITE_URL and NEXT_PUBLIC_SUPPORT_EMAIL.
@@ -45,8 +45,8 @@ workflows:
         script: xcode-project use-profiles
       - name: Set build number
         script: |
-          # Codemagic's BUILD_NUMBER goes up by one every build, so TestFlight never sees a duplicate.
-          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = $BUILD_NUMBER;/g" "$XCODE_PROJECT/project.pbxproj"
+          # PROJECT_BUILD_NUMBER increases across both workflows, avoiding duplicate build numbers.
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = $PROJECT_BUILD_NUMBER;/g" "$XCODE_PROJECT/project.pbxproj"
           grep -m1 "CURRENT_PROJECT_VERSION" "$XCODE_PROJECT/project.pbxproj"
       - name: Build signed .ipa
         script: |
@@ -61,3 +61,59 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+
+  ios-app-store:
+    name: MyNurse iOS → App Store review
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # The name you gave your App Store Connect API key in Codemagic
+      # (Team settings → Team integrations → Developer Portal → Manage keys).
+      app_store_connect: Codemagic
+    environment:
+      # Variable group holding NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+      # NEXT_PUBLIC_SITE_URL and NEXT_PUBLIC_SUPPORT_EMAIL.
+      groups:
+        - mynurse
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.simpleai.mynurse
+      vars:
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+      node: 22
+      xcode: latest
+    scripts:
+      - name: Check build settings
+        script: |
+          for v in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY NEXT_PUBLIC_SITE_URL; do
+            if [ -z "${!v}" ]; then echo "Missing $v — add it to the 'mynurse' variable group."; exit 1; fi
+          done
+          case "$NEXT_PUBLIC_SITE_URL" in *YOUR-SITE*) echo "NEXT_PUBLIC_SITE_URL is still the placeholder."; exit 1;; esac
+      - name: Install npm dependencies
+        script: npm ci
+      - name: Build web app
+        script: npm run build
+      - name: Sync web app into the iOS project
+        script: npx cap sync ios
+      - name: Set up code signing
+        script: xcode-project use-profiles
+      - name: Set build number
+        script: |
+          # PROJECT_BUILD_NUMBER increases across both workflows, avoiding duplicate build numbers.
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = $PROJECT_BUILD_NUMBER;/g" "$XCODE_PROJECT/project.pbxproj"
+          grep -m1 "CURRENT_PROJECT_VERSION" "$XCODE_PROJECT/project.pbxproj"
+      - name: Build signed .ipa
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_app_store: true
+        release_type: MANUAL
