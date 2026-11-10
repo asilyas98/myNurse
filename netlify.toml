@@ -1,0 +1,19 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# The Supabase URL and publishable key are meant to be public (they ship in the
+# browser bundle; RLS protects the data). Keep ANTHROPIC_API_KEY out of this list.
+[build.environment]
+  SECRETS_SCAN_OMIT_PATHS = "ios/App/App/public/**"
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,NEXT_PUBLIC_SITE_URL,NEXT_PUBLIC_SUPPORT_EMAIL"
+
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
